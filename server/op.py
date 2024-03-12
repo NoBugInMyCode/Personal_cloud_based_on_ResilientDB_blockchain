@@ -42,10 +42,82 @@ def sign_up(pub_key_str: str, user_name: str) -> bool:
     db = client[user_name]
     collection = db['metadata']
     collection.insert_one({"public key": pub_key_str})
+    set_value(user_name + " file_structure", json.dumps({"~/": {}}))
     return True
 
 
+def mkdir(user_name: str, current_dir: str, new_dir_name: str, client_socket):
+    # TESTED
+    file_structure = json.loads(get_value(user_name + " file_structure"))
+    print(f"FILE STRUCTURE: {file_structure}")
+    print(f"CURRENT DIR:{current_dir}")
+    current_dir_parts = current_dir.strip("/").split('/')
+    if current_dir_parts[-1] == "":
+        current_dir_parts.remove("")
+    # 从根目录开始寻找目标目录
+    target_dir = file_structure["~/"]
+    print(f"TARGET DIR:{(target_dir)}")
+    # 遍历当前目录路径中的每一部分以找到目标目录
+    for sub_dir in current_dir_parts:
+        print(f"SUB DIR:{sub_dir}")
+        sub_dir = "/" + sub_dir
+        if sub_dir in target_dir:
+            target_dir = target_dir[sub_dir]
+        else:
+            # 如果当前路径部分不存在，则发送错误消息给客户端并返回
+            client_socket.sendall(json.dumps({"mkdir_result": False, "message": f"[!] Directory not found"}).encode('utf-8'))
+            return
+
+    # 检查新目录是否已存在
+    if new_dir_name in target_dir:
+        client_socket.sendall(json.dumps({"mkdir_result": False, "message": f"[!] Directory already exists"}).encode('utf-8'))
+        return
+    else:
+        # 创建新目录
+        target_dir[new_dir_name] = {}
+        # print(f"MODIFIED FILE STRUCTURE: {file_structure}")
+        # 将更新后的文件结构保存回数据库
+        # print(f"MODIFIED FILE STRUCTURE: {file_structure}")
+        set_value(user_name + " file_structure", json.dumps(file_structure))
+
+        # 发送成功消息
+        client_socket.sendall(json.dumps({"mkdir_result": True, "message": f"[+] {new_dir_name} created successfully"}).encode('utf-8'))
+
+
+def ls(current_dir: str, user_name: str, client_socket: socket.socket):
+    # TESTED
+    file_structure = json.loads(get_value(user_name + " file_structure"))
+
+    # 从根目录开始寻找目标目录
+    target_dir = file_structure["~/"]
+    current_dir_parts = current_dir.strip("/").split('/')
+
+    # 如果current_dir_parts为空，说明当前目录是根目录，不需要进一步解析
+    if not current_dir_parts or current_dir_parts == ['']:
+        dir_contents = list(target_dir.keys())
+        client_socket.sendall(json.dumps({"ls_result": True, "contents": dir_contents}).encode('utf-8'))
+        return
+
+    # 遍历当前目录路径中的每一部分以找到目标目录
+    for sub_dir in current_dir_parts:
+        sub_dir = "/" + sub_dir
+        if sub_dir:  # 忽略空的sub_dir部分
+            if sub_dir in target_dir:
+                target_dir = target_dir[sub_dir]
+            else:
+                # 如果当前路径部分不存在，则发送错误消息给客户端并返回
+                client_socket.sendall(json.dumps({"ls_result": False, "message": "[!] Directory not found"}).encode('utf-8'))
+                return
+
+    # 列出目标目录下的所有文件和目录
+    dir_contents = list(target_dir.keys())
+
+    # 发送目录内容给客户端
+    client_socket.sendall(json.dumps({"ls_result": True, "contents": dir_contents}).encode('utf-8'))
+
+
 def login(user_name: str, client_socket: socket.socket):
+    # TESTED
     pub_key_string = get_value(user_name)
     if pub_key_string == "" or pub_key_string == "\n" or pub_key_string == " ":
         print("[!] User name check not pass login refuse")

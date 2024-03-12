@@ -3,24 +3,31 @@ import os
 import random
 import string
 import sys
-
+import json
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 
 sys.path.append("kv-service_python_api/")
 from kv_operation import get_value, set_value
 
-# print(set_value("test", "\n"))
-# print(get_value("test"))
-
-pub_key = RSA.importKey(get_value("test").encode('utf-8'))
-
-random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-cipher_rsa = PKCS1_OAEP.new(pub_key)
-encrypted_random_string = cipher_rsa.encrypt(random_string.encode())
-encrypted_random_string = binascii.hexlify(encrypted_random_string).decode('ascii')
-
-
-
-
+data = {
+    "~/": {
+        "test_img.jpeg": {"_id": 123, "Upload_date": 2024, "file_size": 3},
+        "/picture": {
+            "/my_picture": {},
+            "/children_picture": {},
+            "/friend_picture": {},
+            "/parent_picture": {},
+        },
+        "/document": {
+            "/personal_document": {},
+            "/work_document": {},
+        }
+    }
+}
+current_dir = "~/picture"
+# set_value("test", "\n")
+set_value("test file_structure", json.dumps(data))
+print(get_value("test file_structure"))
+print(get_value("test"))
 

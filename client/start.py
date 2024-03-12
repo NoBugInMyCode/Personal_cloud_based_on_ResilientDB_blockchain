@@ -18,11 +18,16 @@ server_ip = '10.0.0.110'  # 服务器的IP地址
 server_port = 5001  # 服务器的端口号
 file_path = "C:/Users/29400/Desktop/ubuntu-22.04.3-desktop-amd64.iso"  # 要传输的文件路径
 # 创建socket对象
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+command_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+extend_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+file_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # 连接到服务器
-client_socket.connect((server_ip, server_port))
+command_socket.connect((server_ip, server_port))
+extend_socket.connect((server_ip, 5002))
+file_socket.connect((server_ip, 5003))
 global_username = ""
+
+current_dir = ""
 
 
 def _public_key_to_string(pub_key):
@@ -32,7 +37,7 @@ def _public_key_to_string(pub_key):
 
 def _extend_login_time():
     while running:
-        client_socket.sendall((json.dumps({"operation": "extend", "username": global_username})).encode('utf-8'))
+        extend_socket.sendall((json.dumps({"operation": "extend", "username": global_username})).encode('utf-8'))
         time.sleep(3)
 
 
@@ -52,22 +57,22 @@ def sign_up(username: str, password: str):
                             "username": username})
 
     # 发送JSON数据
-    client_socket.sendall(json_data.encode())
+    command_socket.sendall(json_data.encode())
 
     print(f"[*] Signup request sent to server")
 
     # 等待服务器端返回
-    response_data = client_socket.recv(4096).decode('utf-8')
+    response_data = command_socket.recv(4096).decode('utf-8')
     response = json.loads(response_data)
 
     if response["checker_result"]:
         print("[+] Username check passed, generating RSA key pair.")
         pub_key_string = _generate_key_pair(username, password)
         print("[+] Key pair generated, please store private_key.pem in a safe place.")
-        client_socket.sendall((json.dumps({"pub_key_str": pub_key_string})).encode())
+        command_socket.sendall((json.dumps({"pub_key_str": pub_key_string})).encode())
 
         # 等待服务器端返回注册结果
-        response_data = client_socket.recv(4096).decode('utf-8')
+        response_data = command_socket.recv(4096).decode('utf-8')
         response = json.loads(response_data)
         if response["signup_result"]:
             print("[+] Account as been created successfully, please login.")
@@ -77,11 +82,11 @@ def sign_up(username: str, password: str):
 
 def log_in(username: str, password: str):
     # 发送登录请求
-    client_socket.sendall((json.dumps({"operation": "login", "username": username})).encode('utf-8'))
+    command_socket.sendall((json.dumps({"operation": "login", "username": username})).encode('utf-8'))
     print("[*] Login request sent to server")
 
     # 等待服务器端返回用户是否存在
-    response_data = client_socket.recv(4096).decode('utf-8')
+    response_data = command_socket.recv(4096).decode('utf-8')
     response = json.loads(response_data)
 
     # 查看服务器端返回的消息
@@ -90,7 +95,7 @@ def log_in(username: str, password: str):
         return
 
     # 等待服务器端返回密语
-    response_data = client_socket.recv(4096).decode('utf-8')
+    response_data = command_socket.recv(4096).decode('utf-8')
     response = json.loads(response_data)
     print("[+] Received cipher from server")
 
@@ -113,10 +118,10 @@ def log_in(username: str, password: str):
 
     # Convert decrypted bytes to string before sending back to server
     decrypted_string_str = decrypted_string.decode('ascii')
-    client_socket.sendall((json.dumps({"decrypted_string": decrypted_string_str})).encode('utf-8'))
+    command_socket.sendall((json.dumps({"decrypted_string": decrypted_string_str})).encode('utf-8'))
 
     # 等待服务器返回登陆状况
-    response_data = client_socket.recv(4096).decode('utf-8')
+    response_data = command_socket.recv(4096).decode('utf-8')
     print("[+] Received login result from server")
     response = json.loads(response_data)
 
@@ -134,7 +139,71 @@ def log_in(username: str, password: str):
         print("[+] Login failed(cipher does not match)")
 
 
+def mkdir(dir_name: str):
+    global current_dir, running, login_statue
+    print(f"CURRENT DIR: {current_dir}")
+    # 发送创建文件夹请求
+    print("[*] Sending mkdir request to server")
+    command_socket.sendall((json.dumps({"operation": "mkdir", "username": global_username})).encode('utf-8'))
+
+    # 等待服务器端检查用户是否为登陆状态
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response["user_available_check"]:
+        print("[+] User availability check passed, continue")
+    else:
+        print("[!] User login timeout, please relog in")
+        running = False
+        login_statue = False
+
+    # 将所需信息发送给服务器端
+    command_socket.sendall((json.dumps({"operation": "mkdir",
+                                        "username": global_username,
+                                        "current_dir": current_dir,
+                                        "new_dir_name": dir_name})).encode('utf-8'))
+
+    # 接收服务器返回的消息
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response['mkdir_result']:
+        print(response['message'])
+    else:
+        print(response['message'])
+
+
+def ls():
+    global current_dir, running, login_statue
+
+    # 发送ls命令请求
+    print("[*] Sending ls request to server")
+    command_socket.sendall((json.dumps({"operation": "ls", "username": global_username})).encode('utf-8'))
+
+    # 等待服务器端检查用户是否为登陆状态
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response["user_available_check"]:
+        print("[+] User availability check passed, continue")
+    else:
+        print("[!] User login timeout, please relog in")
+        running = False
+        login_statue = False
+
+    # 将所需信息发送给服务器端
+    command_socket.sendall((json.dumps({"operation": "mkdir",
+                                        "username": global_username,
+                                        "current_dir": current_dir})).encode('utf-8'))
+
+    # 等待接收服务器返回的消息
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response["ls_result"]:
+        print("\t\t\t\t".join(response["contents"]))
+    else:
+        print(response['message'])
+
+
 def start_client():
+    global current_dir
     print("Welcome to ResDrive, a decentralized personal cloud based on ResilientDB")
     while True:
         if not login_statue:
@@ -153,7 +222,31 @@ def start_client():
                 else:
                     sign_up(login_or_signup[1], login_or_signup[2])
         else:
-            command = input(global_username + "@ResDrive:~/")
+            command = input(current_dir)
+            command = command.split(" ")
+            if command[0] == "upload":
+                continue
+            elif command[0] == "download":
+                continue
+            elif command[0] == "ls":
+                continue
+            elif command[0] == "mkdir":
+                continue
+            elif command[0] == "cd  ":
+                continue
+            elif command[0] == "cd ..":
+                continue
+            elif command[0] == "help":
+                continue
+            elif command[0] == "mkdir":
+                mkdir(command[1])
+            else:
+                print("Wrong command use help to see full commands")
 
 
-start_client()
+# start_client()
+# sign_up("test", "123456")
+log_in("test", "123456")
+current_dir = "/picture"
+ls()
+
