@@ -202,6 +202,90 @@ def ls():
         print(response['message'])
 
 
+def cd(target_dir: str):
+    global current_dir, running, login_statue
+    # 发送cd命令请求
+    print("[*] Sending cd request to server")
+    command_socket.sendall((json.dumps({"operation": "cd", "username": global_username})).encode('utf-8'))
+
+    # 等待服务器端检查用户是否为登陆状态
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response["user_available_check"]:
+        print("[+] User availability check passed, continue")
+    else:
+        print("[!] User login timeout, please relog in")
+        running = False
+        login_statue = False
+
+    # 将所需信息发送给服务器端
+    command_socket.sendall((json.dumps({"operation": "cd",
+                                        "username": global_username,
+                                        "current_dir": current_dir,
+                                        "target_dir": target_dir})).encode('utf-8'))
+
+    # 等待接收服务器返回的消息并处理
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response['cd_result']:
+        print(f"[+] Successfully change direction to {target_dir}")
+        current_dir += ("/" + target_dir)
+    else:
+        print(response['message'])
+
+
+def back():
+    global current_dir
+    if current_dir == "":
+        print("[*] You already at root")
+    else:
+        current_dir_list = current_dir.split('/')
+        current_dir_list.pop()
+        current_dir = '/'.join(current_dir_list)
+
+
+def rm(target_dir: str):
+    global current_dir, running, login_statue
+    # 发送rm命令请求
+    print("[*] Sending rm request to server")
+    command_socket.sendall((json.dumps({
+        "operation": "rm",
+        "username": global_username})).encode('utf-8'))
+
+    # 等待服务器端返回响应
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response["user_available_check"]:
+        print("[+] User availability check passed, continue")
+    else:
+        print("[!] User login timeout, please relog in")
+        running = False
+        login_statue = False
+
+    # 将所需信息发送给服务器
+    command_socket.sendall((json.dumps({
+        "operation": "rm",
+        "username": global_username,
+        "current_dir": current_dir,
+        "target_dir": target_dir})).encode('utf-8'))
+
+    # 等待接收服务器返回的消息并处理
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if 'rm_result' in response:
+        if response['rm_result']:
+            print(response['message'])
+        else:
+            print(response['message'])
+    else:
+        print("[!] Unexpected response from server")
+
+
+def root():
+    global current_dir
+    current_dir = ""
+
+
 def start_client():
     global current_dir
     print("Welcome to ResDrive, a decentralized personal cloud based on ResilientDB")
@@ -232,14 +316,14 @@ def start_client():
                 continue
             elif command[0] == "mkdir":
                 continue
-            elif command[0] == "cd  ":
-                continue
-            elif command[0] == "cd ..":
+            elif command[0] == "back":
                 continue
             elif command[0] == "help":
                 continue
             elif command[0] == "mkdir":
                 mkdir(command[1])
+            elif command[0] == "cd":
+                continue
             else:
                 print("Wrong command use help to see full commands")
 
@@ -247,6 +331,8 @@ def start_client():
 # start_client()
 # sign_up("test", "123456")
 log_in("test", "123456")
-current_dir = "/picture"
+current_dir = ""
 ls()
-
+rm("rm_root_test")
+ls()
+print(f"CURRENT DIR:{current_dir}")

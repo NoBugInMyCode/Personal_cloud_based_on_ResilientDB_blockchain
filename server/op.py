@@ -46,6 +46,40 @@ def sign_up(pub_key_str: str, user_name: str) -> bool:
     return True
 
 
+def cd(user_name: str, current_dir: str, target_dir_name: str, client_socket: socket.socket):
+    # 加载当前用户的文件结构
+    file_structure = json.loads(get_value(user_name + " file_structure"))
+
+    # 准备检查的目标目录，考虑到根目录的特殊情况
+    if current_dir == "~/" and target_dir_name == "":
+        # 已经在根目录，无需更改
+        return current_dir
+
+    # 处理当前目录和目标目录的路径格式
+    current_dir = current_dir.rstrip("/") + "/"  # 确保以"/"结尾
+    target_dir_path = current_dir + target_dir_name  # 构造完整目标目录路径
+
+    current_dir_parts = current_dir.strip("/").split('/')
+    target_dir_parts = target_dir_path.strip("/").split('/')
+
+    # 尝试定位到目标目录
+    target_dir = file_structure.get("~/", {})
+    for part in target_dir_parts:
+        part = "/" + part  # 确保格式一致
+        if part in target_dir:
+            target_dir = target_dir[part]
+        else:
+            # 目标目录不存在，发送错误消息
+            client_socket.sendall(
+                json.dumps({"cd_result": False, "message": "[!] Directory not found"}).encode('utf-8'))
+            return current_dir  # 返回原来的目录路径，不更改
+
+    # 目标目录存在，发送成功消息
+    new_current_dir = "/".join(target_dir_parts)
+    client_socket.sendall(json.dumps({"cd_result": True, "new_dir": new_current_dir}).encode('utf-8'))
+    return new_current_dir
+
+
 def mkdir(user_name: str, current_dir: str, new_dir_name: str, client_socket):
     # TESTED
     file_structure = json.loads(get_value(user_name + " file_structure"))
@@ -65,12 +99,14 @@ def mkdir(user_name: str, current_dir: str, new_dir_name: str, client_socket):
             target_dir = target_dir[sub_dir]
         else:
             # 如果当前路径部分不存在，则发送错误消息给客户端并返回
-            client_socket.sendall(json.dumps({"mkdir_result": False, "message": f"[!] Directory not found"}).encode('utf-8'))
+            client_socket.sendall(
+                json.dumps({"mkdir_result": False, "message": f"[!] Directory not found"}).encode('utf-8'))
             return
 
     # 检查新目录是否已存在
     if new_dir_name in target_dir:
-        client_socket.sendall(json.dumps({"mkdir_result": False, "message": f"[!] Directory already exists"}).encode('utf-8'))
+        client_socket.sendall(
+            json.dumps({"mkdir_result": False, "message": f"[!] Directory already exists"}).encode('utf-8'))
         return
     else:
         # 创建新目录
@@ -81,7 +117,48 @@ def mkdir(user_name: str, current_dir: str, new_dir_name: str, client_socket):
         set_value(user_name + " file_structure", json.dumps(file_structure))
 
         # 发送成功消息
-        client_socket.sendall(json.dumps({"mkdir_result": True, "message": f"[+] {new_dir_name} created successfully"}).encode('utf-8'))
+        client_socket.sendall(
+            json.dumps({"mkdir_result": True, "message": f"[+] {new_dir_name} created successfully"}).encode('utf-8'))
+
+
+def rm(user_name: str, current_dir: str, target_dir_name: str, client_socket: socket.socket):
+    # TESTED
+    file_structure = json.loads(get_value(user_name + " file_structure"))
+
+    # 处理当前目录路径格式
+    current_dir = current_dir.rstrip("/") + "/"  # 确保以"/"结尾
+    target_dir_path = current_dir + target_dir_name  # 构造完整目标目录路径
+
+    current_dir_parts = current_dir.strip("/").split('/')
+    target_dir_parts = target_dir_path.strip("/").split('/')
+
+    # 尝试定位到目标目录的父目录
+    parent_dir = file_structure.get("~/", {})
+    for part in target_dir_parts[:-1]:  # 排除目标目录名，找到其父目录
+        part = "/" + part  # 确保格式一致
+        if part in parent_dir:
+            parent_dir = parent_dir[part]
+        else:
+            # 目标目录的父目录不存在，发送错误消息
+            client_socket.sendall(
+                json.dumps({"rm_result": False, "message": "[!] Parent directory not found"}).encode('utf-8'))
+            return
+
+    # 检查目标目录是否存在
+    target_dir_name = "/" + target_dir_name  # 确保格式一致
+    if target_dir_name in parent_dir:
+        # 检查目标目录是否为空
+        if not parent_dir[target_dir_name]:  # 如果目标目录为空
+            del parent_dir[target_dir_name]  # 删除目标目录
+            set_value(user_name + " file_structure", json.dumps(file_structure))  # 更新数据库中的文件结构
+            client_socket.sendall(json.dumps(
+                {"rm_result": True, "message": f"[+] Directory {target_dir_name} removed successfully"}).encode(
+                'utf-8'))
+        else:
+            client_socket.sendall(
+                json.dumps({"rm_result": False, "message": "[!] Directory is not empty"}).encode('utf-8'))
+    else:
+        client_socket.sendall(json.dumps({"rm_result": False, "message": "[!] Directory not found"}).encode('utf-8'))
 
 
 def ls(current_dir: str, user_name: str, client_socket: socket.socket):
@@ -106,7 +183,8 @@ def ls(current_dir: str, user_name: str, client_socket: socket.socket):
                 target_dir = target_dir[sub_dir]
             else:
                 # 如果当前路径部分不存在，则发送错误消息给客户端并返回
-                client_socket.sendall(json.dumps({"ls_result": False, "message": "[!] Directory not found"}).encode('utf-8'))
+                client_socket.sendall(
+                    json.dumps({"ls_result": False, "message": "[!] Directory not found"}).encode('utf-8'))
                 return
 
     # 列出目标目录下的所有文件和目录

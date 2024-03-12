@@ -14,7 +14,7 @@ data = {
     "~/": {
         "test_img.jpeg": {"_id": 123, "Upload_date": 2024, "file_size": 3},
         "/picture": {
-            "/my_picture": {},
+            "/my_picture": {"/test_rm": {}},
             "/children_picture": {},
             "/friend_picture": {},
             "/parent_picture": {},
@@ -22,7 +22,8 @@ data = {
         "/document": {
             "/personal_document": {},
             "/work_document": {},
-        }
+        },
+        "/rm_root_test": {},
     }
 }
 current_dir = "~/picture"

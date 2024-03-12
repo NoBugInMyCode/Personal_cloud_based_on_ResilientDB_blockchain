@@ -6,7 +6,7 @@ import time
 from pymongo import MongoClient
 import gridfs
 
-from op import username_checker, sign_up, login, mkdir, ls
+from op import username_checker, sign_up, login, mkdir, ls, cd, rm
 
 user_list = {}
 
@@ -83,11 +83,35 @@ def handle_client_connection(client_socket):
                     new_dir_name = "/" + response['new_dir_name']
                     mkdir(user_name, current_dir, new_dir_name, client_socket)
                 elif op == "rm":
-                    continue
-                elif op == "cd  ":
-                    continue
-                elif op == "cd ..":
-                    continue
+                    user_name = data['username']
+                    # 检查用户是否在ip_list当中
+                    if user_name in user_list:
+                        client_socket.sendall((json.dumps({"user_available_check": True})).encode('utf-8'))
+                    else:
+                        client_socket.sendall((json.dumps({"user_available_check": False})).encode('utf-8'))
+                        return
+                    # 接收cd所需信息并进行cd操作
+                    response_data = client_socket.recv(4096).decode('utf-8')
+                    response = json.loads(response_data)
+                    current_dir = response['current_dir']
+                    target_dir = response['target_dir']
+                    rm(user_name, current_dir, target_dir, client_socket)
+
+                elif op == "cd":
+                    user_name = data['username']
+                    # 检查用户是否在ip_list当中
+                    if user_name in user_list:
+                        client_socket.sendall((json.dumps({"user_available_check": True})).encode('utf-8'))
+                    else:
+                        client_socket.sendall((json.dumps({"user_available_check": False})).encode('utf-8'))
+                        return
+                    # 接收cd所需信息并进行cd操作
+                    response_data = client_socket.recv(4096).decode('utf-8')
+                    response = json.loads(response_data)
+                    current_dir = response['current_dir']
+                    target_dir = response['target_dir']
+                    cd(user_name, current_dir, target_dir, client_socket)
+
                 elif op == "logout":
                     continue
                 elif op == "ls":
