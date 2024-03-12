@@ -49,17 +49,17 @@ def sign_up(pub_key_str: str, user_name: str) -> bool:
 def mkdir(user_name: str, current_dir: str, new_dir_name: str, client_socket):
     # TESTED
     file_structure = json.loads(get_value(user_name + " file_structure"))
-    print(f"FILE STRUCTURE: {file_structure}")
-    print(f"CURRENT DIR:{current_dir}")
+    # print(f"FILE STRUCTURE: {file_structure}")
+    # print(f"CURRENT DIR:{current_dir}")
     current_dir_parts = current_dir.strip("/").split('/')
     if current_dir_parts[-1] == "":
         current_dir_parts.remove("")
     # 从根目录开始寻找目标目录
     target_dir = file_structure["~/"]
-    print(f"TARGET DIR:{(target_dir)}")
+    # print(f"TARGET DIR:{(target_dir)}")
     # 遍历当前目录路径中的每一部分以找到目标目录
     for sub_dir in current_dir_parts:
-        print(f"SUB DIR:{sub_dir}")
+        # print(f"SUB DIR:{sub_dir}")
         sub_dir = "/" + sub_dir
         if sub_dir in target_dir:
             target_dir = target_dir[sub_dir]
