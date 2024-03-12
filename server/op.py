@@ -20,11 +20,17 @@ def _hash_with_sha256(input_string):
     return sha_signature
 
 
-def sign_up(user_name: str, enc_psw: str):
+def username_checker(user_name: str):
     checker = get_value(user_name)
     if checker == "\n" or checker == " " or checker == "":
-        set_value(user_name, enc_psw)
-        db = client[user_name]
         return True
     else:
         return False
+
+
+def sign_up(pub_key_str: str, user_name: str) -> bool:
+    set_value(user_name, pub_key_str)
+    db = client[user_name]
+    collection = db['metadata']
+    collection.insert_one({"public key": pub_key_str})
+    return True

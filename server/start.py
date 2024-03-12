@@ -2,7 +2,7 @@ import socket
 import threading
 import json
 import time
-from op import sign_up
+from op import username_checker, sign_up
 
 user_list = {}
 
@@ -32,11 +32,23 @@ def handle_client_connection(client_socket):
             op = data.get("operation")
             if op == "signup":
                 user_name = data["username"]
-                enc_psw = data["password"]
-                if sign_up(user_name, enc_psw):
-                    client_socket.sendall((json.dumps({"result": True})).encode('utf-8'))
+                if username_checker(user_name):
+                    client_socket.sendall((json.dumps({"checker_result": True})).encode('utf-8'))
                 else:
-                    client_socket.sendall((json.dumps({"result": False})).encode('utf-8'))
+                    client_socket.sendall((json.dumps({"checker_result": False})).encode('utf-8'))
+                    break
+
+                # 等待客户端返回公钥
+                response_data = client_socket.recv(4096).decode('utf-8')
+                print(f"[+] Received public key from client")
+                response = json.loads(response_data)
+                pub_key_str = response["pub_key_str"]
+
+                # Set up user
+                sign_up(pub_key_str, user_name)
+
+                # Send success message back
+                client_socket.sendall((json.dumps({"signup_result": True})).encode('utf-8'))
 
     finally:
         client_socket.close()  # 确保释放资源
