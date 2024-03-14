@@ -1,14 +1,17 @@
+import base64
 import hashlib
 import json
 import socket
 import os
 import time
-
-from Crypto.Cipher import PKCS1_OAEP, AES
+import hashlib
+from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 import binascii
-import hashlib
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+
 import threading
 
 login_statue = False
@@ -26,8 +29,16 @@ command_socket.connect((server_ip, server_port))
 extend_socket.connect((server_ip, 5002))
 file_socket.connect((server_ip, 5003))
 global_username = ""
-
+private_key = ""
 current_dir = ""
+
+
+def _digital_signature(message: bytes) -> json:
+    global private_key
+    h = SHA256.new(message)
+    signature = pkcs1_15.new(private_key).sign(h)
+    # 将哈希和签名转换为十六进制字符串
+    return {"hash": h.hexdigest(), "signature": signature.hex()}
 
 
 def _public_key_to_string(pub_key):
@@ -81,6 +92,8 @@ def sign_up(username: str, password: str):
 
 
 def log_in(username: str, password: str):
+    global private_key
+
     # 发送登录请求
     command_socket.sendall((json.dumps({"operation": "login", "username": username})).encode('utf-8'))
     print("[*] Login request sent to server")
@@ -156,11 +169,31 @@ def mkdir(dir_name: str):
         running = False
         login_statue = False
 
+    # 进行数字签名
+    message_dict = {
+        "operation": "mkdir",
+        "username": global_username,  # 假设这是已定义的变量
+        "current_dir": current_dir,  # 假设这是已定义的变量
+        "new_dir_name": dir_name  # 假设这是已定义的变量
+    }
+    message_json = json.dumps(message_dict)
+    message_bytes = message_json.encode('utf-8')
+    signature_result = _digital_signature(message_bytes)
+
     # 将所需信息发送给服务器端
-    command_socket.sendall((json.dumps({"operation": "mkdir",
-                                        "username": global_username,
-                                        "current_dir": current_dir,
-                                        "new_dir_name": dir_name})).encode('utf-8'))
+    # 假设 command_socket 是已经建立的连接
+    command_socket.sendall(json.dumps({
+        "message": message_dict,
+        "signature": signature_result["signature"]
+    }).encode('utf-8'))
+
+    # 接收数字签名检查结果
+    response_data = command_socket.recv(4096).decode('utf-8')
+    response = json.loads(response_data)
+    if response['ds_checker_result']:
+        print("[+] Digital signature check passed on server end, continue")
+    else:
+        print("[!] Digital signature check not pass, you have been logged out")
 
     # 接收服务器返回的消息
     response_data = command_socket.recv(4096).decode('utf-8')
@@ -333,6 +366,6 @@ def start_client():
 log_in("test", "123456")
 current_dir = ""
 ls()
-rm("rm_root_test")
+mkdir("sign_test")
 ls()
 print(f"CURRENT DIR:{current_dir}")

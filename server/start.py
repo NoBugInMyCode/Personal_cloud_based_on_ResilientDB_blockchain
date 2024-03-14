@@ -3,6 +3,8 @@ import threading
 import json
 import time
 
+from Crypto.Hash import SHA256
+from Crypto.Signature import pkcs1_15
 from pymongo import MongoClient
 import gridfs
 
@@ -23,8 +25,22 @@ def remove_inactive_users():
         time.sleep(2)  # 每2秒检查一次
 
 
+def digital_signature_checker(pub_key, message_bytes, received_hex_signature):
+    # 将接收到的十六进制签名字符串转换为二进制
+    signature = bytes.fromhex(received_hex_signature)
+    # 根据原始消息计算哈希值
+    h = SHA256.new(message_bytes)
+    try:
+        pkcs1_15.new(pub_key).verify(h, signature)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def handle_client_connection(client_socket):
+    pub_key = ""
     client_address = client_socket.getpeername()
+    global user_list
     try:
         while True:
             try:
@@ -62,9 +78,9 @@ def handle_client_connection(client_socket):
                 elif op == "login":
                     print(f"[*] Login command triggered by {client_address}")
                     username = data['username']
-                    login_result = login(username, client_socket)
+                    login_result, pub_key = login(username, client_socket)
+
                     if login_result:
-                        global user_list
                         user_list[username] = time.time()
 
                 elif op == "mkdir":
@@ -76,12 +92,26 @@ def handle_client_connection(client_socket):
                         client_socket.sendall((json.dumps({"user_available_check": False})).encode('utf-8'))
                         return
 
-                    # 接收mkdir所需信息并进行mkdir操作
+                    # 接收mkdir所需数据
                     response_data = client_socket.recv(4096).decode('utf-8')
                     response = json.loads(response_data)
-                    current_dir = response['current_dir']
-                    new_dir_name = "/" + response['new_dir_name']
-                    mkdir(user_name, current_dir, new_dir_name, client_socket)
+
+                    # 将消息部分转换为字节流，准备重新计算哈希值
+                    message_json = json.dumps(response['message'])
+                    message_bytes = message_json.encode('utf-8')
+                    signature_hex = response['signature']
+
+                    # 使用数字签名验证函数
+                    digital_signature_result = digital_signature_checker(pub_key, message_bytes, signature_hex)
+                    if digital_signature_result:
+                        client_socket.sendall(json.dumps({"ds_checker_result": True}).encode('utf-8'))
+                        message = response['message']
+                        current_dir = message['current_dir']
+                        new_dir_name = "/" + message['new_dir_name']
+                        mkdir(user_name, current_dir, new_dir_name, client_socket)
+                    else:
+                        del user_list[user_name]
+                        client_socket.sendall(json.dumps({"ds_checker_result": False}).encode('utf-8'))
                 elif op == "rm":
                     user_name = data['username']
                     # 检查用户是否在ip_list当中
@@ -144,10 +174,10 @@ def handle_client_connection(client_socket):
                 client_socket.close()
                 # 可以选择断开连接或忽略错误
                 break
-            except Exception as e:
-                print(f"Unexpected error: {e}")
-                client_socket.close()
-                break  # 遇到其他异常，退出循环
+            # except Exception as e:
+            #     print(f"Unexpected error: {e}")
+            #     client_socket.close()
+            #     break  # 遇到其他异常，退出循环
 
     finally:
         client_socket.close()  # 确保释放资源

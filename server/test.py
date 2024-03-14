@@ -26,9 +26,13 @@ data = {
         "/rm_root_test": {},
     }
 }
-current_dir = "~/picture"
-# set_value("test", "\n")
-set_value("test file_structure", json.dumps(data))
+# current_dir = "~/picture"
+# # set_value("test", "\n")
+# set_value("test file_structure", json.dumps(data))
 print(get_value("test file_structure"))
-print(get_value("test"))
+# print(get_value("test"))
+
+
+# a = (json.dumps({"operation": "mkdir", "username": "aaa"})).encode('utf-8')
+# print(type(a))
 
